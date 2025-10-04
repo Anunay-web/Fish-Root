@@ -1,0 +1,174 @@
+:root{
+  --bg1: #EAF6FF;
+  --accent: #3A91C8;
+  --accent-2:#1059B6;
+  --muted:#6b7280;
+  --card-bg: rgba(255,255,255,0.95);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, "Helvetica Neue", Arial;
+}
+
+html, body { height: 100%; }
+body {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #FEFFFF 0%, #EAF6FF 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Fish background */
+.fish-scene {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.bubble {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  animation: floaty 8s ease-in-out infinite;
+}
+.b1 { width: 80px; height: 80px; left: 15%; top: 10%; }
+.b2 { width: 50px; height: 50px; left: 70%; top: 30%; }
+.b3 { width: 60px; height: 60px; left: 40%; top: 70%; }
+.b4 { width: 35px; height: 35px; left: 25%; top: 50%; }
+.b5 { width: 45px; height: 45px; left: 60%; top: 60%; }
+
+@keyframes floaty {
+  0%   { transform: translateY(0) translateX(0); }
+  50%  { transform: translateY(-15px) translateX(8px); }
+  100% { transform: translateY(0) translateX(0); }
+}
+
+.fish, .fish2, .fish3 {
+  position: absolute;
+  font-size: 32px;
+  animation: swim 6s linear infinite;
+}
+
+.fish2 { animation-duration: 8s; animation-direction: reverse; opacity:0.9; }
+.fish3 { animation-duration: 10s; animation-direction: alternate; opacity:0.8; }
+
+@keyframes swim {
+  0%   { transform: translateX(-50px) translateY(0) rotate(-5deg); }
+  25%  { transform: translateX(150px) translateY(-20px) rotate(5deg); }
+  50%  { transform: translateX(300px) translateY(0) rotate(-5deg); }
+  75%  { transform: translateX(150px) translateY(20px) rotate(5deg); }
+  100% { transform: translateX(-50px) translateY(0) rotate(-5deg); }
+}
+
+.fish:hover, .fish2:hover, .fish3:hover {
+  animation-play-state: paused;
+}
+
+/* Main wrapper */
+.wrap {
+  width: 900px;
+  max-width: 95%;
+  height: 600px;
+  background: rgba(255,255,255,0.6);
+  border-radius: 28px;
+  box-shadow: 0 20px 50px rgba(25,40,70,0.12);
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+/* Left illustration side */
+.art {
+  flex: 1.2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  background: linear-gradient(180deg, rgba(58,145,200,0.06), rgba(16,89,182,0.02));
+  text-align: center;
+}
+.art h2 { font-size: 28px; margin-bottom: 12px; }
+.art p { color: var(--muted); font-size: 14px; }
+
+/* Right panel */
+.panel {
+  flex: 1;
+  padding: 48px 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+  background: var(--card-bg);
+  border-radius: 0 28px 28px 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.logo {
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center;
+  color: white; font-weight: 700;
+  box-shadow: 0 6px 18px rgba(16,89,182,0.18);
+}
+
+h1 { font-size: 20px; margin: 0; }
+p.lead { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+form {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.input { display: flex; flex-direction: column; gap: 8px; }
+.input label {
+  font-size: 12px;
+  color: var(--muted);
+}
+input[type="text"], input[type="password"], select {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(16,89,182,0.08);
+  background: #fff;
+  font-size: 15px;
+  outline: none;
+}
+input:focus, select:focus {
+  border-color: var(--accent);
+}
+
+.btn {
+  padding: 12px;
+  border-radius: 12px;
+  border: 0;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: white;
+}
+
+.link { color: var(--accent-2); font-size: 13px; text-decoration: none; text-align:center; }
+
+@media (max-width: 880px){
+  .wrap { flex-direction: column; height: auto; padding: 18px; border-radius: 18px; }
+  .art { order: 2; padding: 20px; height: 250px; }
+  .panel { order: 1; padding: 26px; }
+}

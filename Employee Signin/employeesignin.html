@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExpenseFlow - Local Expense Management</title>
+  
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .container-shadow {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body>
+
+    
+    <div id="app" class="min-h-screen flex flex-col items-center p-4 md:p-8">
+       
+    </div>
+
+    
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50"></div>
+
+    <script type="module">
+      
+        const GEMINI_API_KEY = "";
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+        
+
+        
+        const STORAGE_KEY = 'expenseFlow_local_data';
+
+        
+        const appState = {
+            user: { uid: null, role: null, managerId: 'manager-mock-id', companyId: 'company-mock-id' },
+            isAuthReady: false,
+            expenses: [],
+            view: 'submit', 
+        };
+
+        
+        const loadStateFromLocalStorage = () => {
+            const storedData = localStorage.getItem(STORAGE_KEY);
+            if (storedData) {
+                try {
+                    const parsedData = JSON.parse(storedData);
+                    appState.expenses = parsedData.expenses || [];
+                } catch (e) {
+                    console.error("Error parsing localStorage data:", e);
+                    appState.expenses = [];
+                }
+            }
+        };
+
+       
+        const saveStateToLocalStorage = () => {
+            const dataToStore = {
+                expenses: appState.expenses
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToStore));
+        };
+
+        const Icon = (name, className = 'w-5 h-5') => {
+            const iconMap = {
+                'receipt': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 10H8"/><path d="M16 14H8"/><path d="M16 18H8"/></svg>',
+                'check': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+                'x': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+                'send': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>',
+                'user': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+                'ai': '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a5 5 0 0 0-5 5c0 2.8 1.5 5.5 5 7.5 3.5-2 5-4.7 5-7.5a5 5 0 0 0-5-5z"/><path d="M12 15v7"/><path d="M5 19h14"/></svg>'
+            };
+            return `<div class="${className}">${iconMap[name] || iconMap.user}</div>`;
+        };
+
+        
+        const ExpenseStatusBadge = (status) => {
+            const baseStyle = "px-3 py-1 text-xs font-semibold rounded-full";
+            let style = "";
+            switch (status) {
+                case 'Pending': style = "bg-yellow-100 text-yellow-800"; break;
+                case 'Approved': style = "bg-green-100 text-green-800"; break;
+                case 'Rejected': style = "bg-red-100 text-red-800"; break;
+                case 'Processing': style = "bg-blue-100 text-blue-800"; break;
+                default: style = "bg-gray-100 text-gray-800";
+            }
+            return `<span class="${baseStyle} ${style}">${status}</span>`;
+        };
+
+    
+        const showToast = (message, type) => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let colorStyle = "";
+            switch (type) {
+                case 'success': colorStyle = "bg-green-500 text-white"; break;
+                case 'error': colorStyle = "bg-red-500 text-white"; break;
+                default: colorStyle = "bg-gray-700 text-white";
+            }
+
+            toast.className = `p-4 rounded-lg shadow-2xl transition-opacity duration-300 mb-3 ${colorStyle}`;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+                setTimeout(() => toast.remove(), 300); 
+            }, 3000);
+        };
+
+        
+        const updateState = (newState) => {
+            Object.assign(appState, newState);
+            renderApp();
+        };
+
+       
+        const callGeminiAPI = async (systemInstruction, userQuery) => {
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+            };
+
+            const maxRetries = 3;
+            let delay = 1000;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(GEMINI_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        if (response.status === 429 || response.status >= 500) {
+                            throw new Error(`API error ${response.status}: Retrying...`);
+                        }
+                        throw new Error(`API error ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (text) {
+                        return text;
+                    } else {
+                        throw new Error("Gemini API returned an empty response.");
+                    }
+
+                } catch (error) {
+                    if (i < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; 
+                    } else {
+                        showToast("Failed to connect to Gemini API permanently.", 'error');
+                        throw new Error("Gemini API failed permanently.");
+                    }
+                }
+            }
+        };
+
+       
+        const initLocalApp = () => {
+       
+            const params = new URLSearchParams(window.location.search);
+            const roleParam = params.get('role');
+            let role = 'Employee';
+            let uid = 'employee-' + Math.random().toString(36).substring(2, 8);
+            
+            if (roleParam === 'manager' || roleParam === 'admin') {
+                role = roleParam.charAt(0).toUpperCase() + roleParam.slice(1);
+                
+                uid = appState.user.managerId; 
+            }
+
+            appState.user = { 
+                uid: uid, 
+                role: role,
+                managerId: appState.user.managerId, // Still needed for targets
+                companyId: 'local-demo-co' 
+            };
+
+            loadStateFromLocalStorage();
+            updateState({ isAuthReady: true });
+        };
+
+
+
+        const renderLoading = () => `
+            <div class="text-center p-20">
+                <svg class="animate-spin mx-auto h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <p class="mt-4 text-gray-600">Initializing Local Expense System...</p>
+            </div>
+        `;
+
+        const renderHeader = () => {
+            const userRoleClass = appState.user.role === 'Admin' ? 'bg-red-500' : appState.user.role === 'Manager' ? 'bg-indigo-500' : 'bg-gray-500';
+            const navItems = [
+                { id: 'submit', label: 'Submit Claim', role: ['Employee', 'Manager', 'Admin'] },
+                { id: 'history', label: 'My History', role: ['Employee', 'Manager', 'Admin'] },
+                { id: 'dashboard', label: 'Approvals Dashboard', role: ['Manager', 'Admin'] },
+            ];
+            
+            const pendingCount = appState.expenses.filter(exp => 
+                exp.status === 'Pending' && (appState.user.role === 'Admin' || exp.current_approver_id === appState.user.uid)
+            ).length;
+
+            const navHtml = navItems
+                .filter(item => item.role.includes(appState.user.role))
+                .map(item => `
+                    <button
+                        data-view="${item.id}"
+                        class="px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 
+                            ${appState.view === item.id 
+                                ? 'bg-indigo-600 text-white shadow-md' 
+                                : 'text-gray-700 hover:bg-indigo-50 hover:text-indigo-600'
+                            }"
+                    >
+                        ${item.label}
+                        ${item.id === 'dashboard' && appState.user.role !== 'Employee' ? `<span class="ml-2 bg-white text-indigo-600 px-2 py-0.5 text-xs rounded-full font-bold">${pendingCount}</span>` : ''}
+                    </button>
+                `).join('');
+
+            return `
+                <header class="w-full max-w-6xl mx-auto bg-white p-4 md:p-6 rounded-xl container-shadow mb-8">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+                        <div class="mb-4 md:mb-0">
+                            <h1 class="text-3xl font-black text-indigo-700">ExpenseFlow (Local)</h1>
+                            <p class="text-sm text-gray-500">Automated Multi-Level Expense Management</p>
+                        </div>
+                        <div class="text-right text-sm">
+                            <p class="font-semibold text-gray-800 flex items-center justify-end">
+                                <span class="px-2 py-0.5 rounded-md text-xs font-bold text-white mr-2 ${userRoleClass}">${appState.user.role || 'Guest'}</span>
+                                ${Icon('user', 'w-4 h-4 mr-1')}
+                                ${appState.user.uid ? appState.user.uid.substring(0, 8) + '...' : 'Loading...'}
+                            </p>
+                            <p class="text-xs text-gray-500">Simulated User ID</p>
+                        </div>
+                    </div>
+                    <nav id="nav-tabs" class="mt-4 border-t pt-4">
+                        <div class="flex flex-wrap gap-2 md:gap-4">
+                            ${navHtml}
+                        </div>
+                    </nav>
+                </header>
+            `;
+        };
+
+        const renderExpenseForm = () => {
+            const categories = ['Travel', 'Food', 'Client Meeting', 'Software', 'Office Supply', 'Miscellaneous'];
+            const today = new Date().toISOString().substring(0, 10);
+            const isDisabled = !appState.user.uid;
+
+            return `
+                <div class="bg-white p-6 md:p-8 rounded-xl container-shadow w-full max-w-lg mx-auto">
+                    <h2 class="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
+                        ${Icon('receipt', 'w-7 h-7 mr-3 text-indigo-600')} New Expense Claim
+                    </h2>
+                    <form id="expense-form" class="space-y-6">
+                        
+                        <!-- 1. Receipt Upload (OCR Simulation) -->
+                        <div class="border-2 border-dashed border-indigo-300 p-6 rounded-lg hover:border-indigo-500 transition duration-150">
+                            <label for="receipt-upload" class="block text-sm font-medium text-gray-700 mb-2 cursor-pointer">
+                                Attach Receipt (Triggers OCR)
+                            </label>
+                            <input id="receipt-upload" type="file" accept="image/*,.pdf" class="hidden" ${isDisabled ? 'disabled' : ''} />
+                            <div class="flex justify-between items-center">
+                                <span id="receipt-filename" class="text-gray-500 italic text-sm">Click to select file...</span>
+                                <div id="ocr-status" class="flex items-center space-x-2 hidden">
+                                    <svg class="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    <span class="text-indigo-600 font-medium">Extracting data...</span>
+                                </div>
+                                <label for="receipt-upload" id="upload-label" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition cursor-pointer ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}">
+                                    ${Icon('send', 'w-4 h-4 mr-2 transform -rotate-45')} Upload
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 2. Amount and Currency -->
+                        <div class="grid grid-cols-3 gap-4">
+                            <div class="col-span-2">
+                                <label for="amount" class="block text-sm font-medium text-gray-700">Amount *</label>
+                                <input type="number" name="amount" id="amount" required placeholder="125.50" ${isDisabled ? 'disabled' : ''}
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+                                />
+                            </div>
+                            <div>
+                                <label for="original_currency" class="block text-sm font-medium text-gray-700">Currency *</label>
+                                <select name="original_currency" id="original_currency" required ${isDisabled ? 'disabled' : ''}
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border bg-white"
+                                >
+                                    <option value="USD">USD</option>
+                                    <option value="EUR">EUR</option>
+                                    <option value="GBP">GBP</option>
+                                    <option value="INR">INR</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 3. Category and Date -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="category" class="block text-sm font-medium text-gray-700">Category *</label>
+                                <select name="category" id="category" required ${isDisabled ? 'disabled' : ''}
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border bg-white"
+                                >
+                                    ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="date" class="block text-sm font-medium text-gray-700">Date *</label>
+                                <input type="date" name="date" id="date" value="${today}" required ${isDisabled ? 'disabled' : ''}
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+                                />
+                            </div>
+                        </div>
+                        
+                        <!-- 4. Description with LLM Feature -->
+                        <div>
+                            <label for="description" class="block text-sm font-medium text-gray-700 flex justify-between items-center">
+                                <span>Description (Required for Reimbursement)</span>
+                                <button type="button" id="draft-justification-btn" ${isDisabled ? 'disabled' : ''}
+                                    class="text-xs flex items-center px-3 py-1 text-white bg-pink-500 hover:bg-pink-600 rounded-full shadow-sm transition disabled:opacity-50"
+                                    title="Use Gemini to draft a formal justification"
+                                >
+                                    <span id="draft-icon" class="mr-1">✨</span>Draft Justification
+                                </button>
+                            </label>
+                            <textarea name="description" id="description" rows="3" placeholder="Purpose of the expense..." ${isDisabled ? 'disabled' : ''}
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"
+                            ></textarea>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" id="submit-expense" ${isDisabled ? 'disabled' : ''}
+                            class="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition duration-150 transform hover:scale-[1.01]"
+                        >
+                            ${Icon('check', 'w-5 h-5 mr-2')} <span id="submit-text">${isDisabled ? 'Loading...' : 'Confirm & Submit Expense'}</span>
+                        </button>
+                    </form>
+                </div>
+            `;
+        };
+
+        const renderManagerDashboard = () => {
+            const isManager = appState.user.role === 'Manager' || appState.user.role === 'Admin';
+            if (!isManager) {
+                return `
+                    <div class="text-center p-10 bg-white rounded-xl container-shadow">
+                        <h2 class="text-2xl font-bold text-gray-700">Permission Denied</h2>
+                        <p class="text-gray-500">To view the dashboard, refresh the page and add **?role=manager** to the URL.</p>
+                    </div>
+                `;
+            }
+
+            const expensesToDisplay = appState.expenses
+                .filter(exp => exp.status === 'Pending')
+                
+                .filter(exp => appState.user.role === 'Admin' || exp.current_approver_id === appState.user.uid)
+                .sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));
+
+
+            if (expensesToDisplay.length === 0) {
+                return `
+                    <div class="bg-white p-6 md:p-8 rounded-xl container-shadow w-full mx-auto">
+                        <h2 class="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
+                            ${Icon('check', 'w-7 h-7 mr-3 text-red-600')} Pending Approvals (0)
+                        </h2>
+                        <div class="text-center p-10 border-2 border-dashed border-gray-200 rounded-xl">
+                            <p class="text-xl text-gray-500">🎉 No expenses requiring your review. Great job!</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const expensesHtml = expensesToDisplay.map(exp => `
+                <div class="p-4 border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition duration-150">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-lg font-bold text-indigo-600">
+                            ${exp.original_currency} ${exp.amount.toFixed(2)}
+                        </span>
+                        ${ExpenseStatusBadge(exp.status)}
+                    </div>
+                    <p class="text-sm text-gray-700 mb-1 font-medium">${exp.description}</p>
+                    <p class="text-xs text-gray-500">
+                        Submitted by: <span class="font-semibold">${exp.submitter_name} (${exp.submitter_id.substring(0, 8)}...)</span> on ${new Date(exp.submitted_at).toLocaleDateString()}
+                    </p>
+                    <p class="text-xs text-gray-500 mb-3">
+                        Category: ${exp.category} | Current Step: <span class="font-medium text-red-600">${exp.workflow_state}</span>
+                    </p>
+
+                    <div class="flex space-x-2 pt-2 border-t mt-2">
+                        <button data-action="approve" data-id="${exp.id}"
+                            class="approval-action flex-1 flex justify-center items-center py-2 px-3 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 transition"
+                        >
+                            ${Icon('check', 'w-4 h-4 mr-1')} Approve
+                        </button>
+                        <button data-action="reject" data-id="${exp.id}"
+                            class="approval-action flex-1 flex justify-center items-center py-2 px-3 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-red-50 transition hover:text-red-700"
+                        >
+                            ${Icon('x', 'w-4 h-4 mr-1')} Reject
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            return `
+                <div class="bg-white p-6 md:p-8 rounded-xl container-shadow w-full mx-auto max-w-4xl">
+                    <h2 class="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
+                        ${Icon('ai', 'w-7 h-7 mr-3 text-red-600')} Pending Approvals (${expensesToDisplay.length})
+                    </h2>
+                    <div id="pending-expenses" class="space-y-4">
+                        ${expensesHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderEmployeeHistory = () => {
+            const userExpenses = appState.expenses
+                .filter(exp => exp.submitter_id === appState.user.uid)
+                .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+            if (userExpenses.length === 0) {
+                return `
+                    <div class="bg-white p-6 md:p-8 rounded-xl container-shadow w-full mx-auto max-w-4xl">
+                        <h2 class="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
+                            ${Icon('receipt', 'w-7 h-7 mr-3 text-indigo-600')} My Expense History (0)
+                        </h2>
+                        <div class="text-center p-10 border-2 border-dashed border-gray-200 rounded-xl">
+                            <p class="text-xl text-gray-500">You haven't submitted any expenses yet.</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const historyHtml = userExpenses.map(exp => `
+                <div class="p-4 border border-gray-100 rounded-lg bg-gray-50 hover:bg-gray-100 transition duration-100">
+                    <div class="flex justify-between items-start mb-1">
+                        <div class="text-lg font-bold text-gray-900">${exp.description}</div>
+                        ${ExpenseStatusBadge(exp.status)}
+                    </div>
+                    <div class="text-sm text-gray-600 grid grid-cols-2">
+                        <span>Amount: <span class="font-semibold">${exp.original_currency} ${exp.amount.toFixed(2)}</span></span>
+                        <span>Category: ${exp.category}</span>
+                        <span>Submitted: ${new Date(exp.submitted_at).toLocaleDateString()}</span>
+                        <span>Current Step: <span class="font-medium text-red-600">${exp.workflow_state}</span></span>
+                    </div>
+                </div>
+            `).join('');
+
+            return `
+                <div class="bg-white p-6 md:p-8 rounded-xl container-shadow w-full mx-auto max-w-4xl">
+                    <h2 class="text-3xl font-extrabold text-gray-900 mb-6 flex items-center">
+                        ${Icon('receipt', 'w-7 h-7 mr-3 text-indigo-600')} My Expense History (${userExpenses.length})
+                    </h2>
+                    <div class="space-y-4">
+                        ${historyHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        
+        const renderApp = () => {
+            const app = document.getElementById('app');
+            let contentHtml = '';
+
+            if (!appState.isAuthReady) {
+                app.innerHTML = renderLoading();
+                return;
+            }
+
+            switch (appState.view) {
+                case 'submit': contentHtml = renderExpenseForm(); break;
+                case 'dashboard': contentHtml = renderManagerDashboard(); break;
+                case 'history': contentHtml = renderEmployeeHistory(); break;
+            }
+            
+            app.innerHTML = renderHeader() + `<main class="w-full max-w-6xl mx-auto flex-grow">${contentHtml}</main>`;
+
+            
+            attachEventListeners();
+        };
+
+        
+
+        const attachEventListeners = () => {
+     
+            document.querySelectorAll('#nav-tabs button').forEach(button => {
+                button.onclick = () => {
+                    updateState({ view: button.dataset.view });
+                };
+            });
+
+            const form = document.getElementById('expense-form');
+            if (form) {
+                const uploadInput = document.getElementById('receipt-upload');
+                const filenameSpan = document.getElementById('receipt-filename');
+                const ocrStatusDiv = document.getElementById('ocr-status');
+                const submitButton = document.getElementById('submit-expense');
+                const amountInput = document.getElementById('amount');
+                const descriptionInput = document.getElementById('description');
+                const draftButton = document.getElementById('draft-justification-btn');
+
+                let uploadedFile = null;
+
+                uploadInput.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    uploadedFile = file;
+                    filenameSpan.textContent = file.name;
+                    ocrStatusDiv.classList.remove('hidden');
+                    submitButton.disabled = true;
+
+                   
+                    setTimeout(() => {
+                        
+                        const mockAmount = (Math.random() * 500).toFixed(2);
+                        const mockVendor = file.name.split('.')[0].replace(/_/g, ' ');
+
+                        amountInput.value = mockAmount;
+                        descriptionInput.value = `Expense for ${mockVendor}`;
+                        document.getElementById('original_currency').value = 'EUR'; // Mocking international receipt
+
+                        showToast(`OCR successful! Data extracted for ${mockVendor}.`, 'success');
+                        ocrStatusDiv.classList.add('hidden');
+                        submitButton.disabled = false;
+                    }, 1500);
+                };
+                
+                
+                if (draftButton) {
+                    draftButton.onclick = async () => {
+                        const draftIcon = document.getElementById('draft-icon');
+                        
+                        if (!amountInput.value || !descriptionInput.value || descriptionInput.value.length < 5) {
+                            showToast("Please enter an amount and a brief description (e.g., 'Team dinner') first.", 'error');
+                            return;
+                        }
+
+                        draftButton.disabled = true;
+                        draftIcon.innerHTML = '<svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+                        
+                        const amount = amountInput.value;
+                        const currency = document.getElementById('original_currency').value;
+                        const category = document.getElementById('category').value;
+                        const initialDescription = descriptionInput.value;
+                        
+                        const systemInstruction = `You are an expert corporate compliance officer and expense justification writer. Your task is to take a brief description of an employee expense and turn it into a formal, compliant, and detailed justification suitable for financial review. The tone must be professional and objective. Do not use conversational filler, just provide the drafted justification text.`;
+
+                        const userQuery = `Draft a justification for an expense categorized as '${category}', amounting to ${currency} ${amount}. The initial, brief description is: "${initialDescription}". Focus on why this expense was necessary for business operations and ensure the output is a single, clear paragraph.`;
+
+                        try {
+                            const generatedText = await callGeminiAPI(systemInstruction, userQuery);
+                          
+                            descriptionInput.value = generatedText;
+                            showToast("Justification drafted successfully!", 'success');
+                        } catch (error) {
+                            
+                        } finally {
+                            draftButton.disabled = false;
+                            draftIcon.innerHTML = '✨';
+                        }
+                    };
+                }
+
+                form.onsubmit = (e) => {
+                    e.preventDefault();
+                    if (!appState.user.uid) {
+                        showToast("System not ready.", 'error');
+                        return;
+                    }
+
+                    submitButton.disabled = true;
+                    document.getElementById('submit-text').textContent = 'Submitting...';
+                    
+                    const expenseId = 'exp-' + Date.now();
+                    const mockReceiptUrl = uploadedFile ? `https://storage.mock/receipts/${expenseId}.jpg` : '';
+                    
+                    const newExpense = {
+                        id: expenseId,
+                        submitter_id: appState.user.uid,
+                        submitter_name: appState.user.role === 'Admin' ? 'Admin User' : 'Employee User', // Mock name
+                        company_id: appState.user.companyId,
+                        status: 'Pending',
+                        submitted_at: new Date().toISOString(),
+                        amount: parseFloat(amountInput.value),
+                        description: descriptionInput.value,
+                        date: document.getElementById('date').value,
+                        category: document.getElementById('category').value,
+                        original_currency: document.getElementById('original_currency').value,
+                        receipt_url: mockReceiptUrl,
+                       
+                        workflow_state: 'Manager Review', 
+                        current_approver_id: appState.user.managerId, 
+                    };
+
+                    appState.expenses.push(newExpense);
+                    saveStateToLocalStorage();
+                    
+                    showToast('Expense submitted successfully! Awaiting Manager Review.', 'success');
+                    
+                    form.reset();
+                    document.getElementById('date').value = new Date().toISOString().substring(0, 10);
+                    filenameSpan.textContent = 'Click to select file...';
+                    uploadedFile = null;
+                    
+                    submitButton.disabled = false;
+                    document.getElementById('submit-text').textContent = 'Confirm & Submit Expense';
+                    renderApp(); 
+                };
+            }
+
+            
+            document.querySelectorAll('.approval-action').forEach(button => {
+                button.onclick = (e) => {
+                    const expenseId = button.dataset.id;
+                    const action = button.dataset.action;
+                    
+                    if (!appState.user.uid) return showToast("System not ready.", 'error');
+                    
+                    button.disabled = true; 
+
+                    const expenseIndex = appState.expenses.findIndex(exp => exp.id === expenseId);
+                    if (expenseIndex === -1) return showToast("Expense not found in local data.", 'error');
+
+                    const expense = appState.expenses[expenseIndex];
+                    let newStatus = expense.status;
+                    let nextApprover = null;
+
+                    if (action === 'approve') {
+
+                        if (appState.user.role === 'Admin' || expense.amount <= 200) { 
+                            newStatus = 'Approved';
+                        } else {
+                            newStatus = 'Pending';
+                            nextApprover = 'FinanceTeamID'; 
+                        }
+                    } else if (action === 'reject') {
+                        newStatus = 'Rejected';
+                    }
+
+                    
+                    appState.expenses[expenseIndex] = {
+                        ...expense,
+                        status: newStatus,
+                        workflow_state: action === 'approve' && nextApprover ? 'Finance Review' : newStatus,
+                        current_approver_id: nextApprover,
+                       
+                        approval_log: (expense.approval_log || []).concat([{
+                            approver_id: appState.user.uid,
+                            action: action,
+                            timestamp: new Date().toISOString()
+                        }])
+                    };
+
+                    saveStateToLocalStorage();
+                    
+                    showToast(`Expense ${expenseId.substring(4)} successfully ${action}d.`, 'success');
+                    renderApp(); 
+                };
+            });
+        };
+
+        window.onload = initLocalApp;
+
+    </script>
+</body>
+</html>

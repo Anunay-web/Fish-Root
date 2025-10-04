@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ExpenseFlow - Manager Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+    .container-shadow {
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2 rgba(0,0,0,0.05);
+    }
+</style>
+</head>
+<body>
+
+<div id="app" class="min-h-screen flex flex-col items-center p-4 md:p-8"></div>
+<div id="toast-container" class="fixed bottom-5 right-5 z-50"></div>
+
+<script>
+const STORAGE_KEY = 'expenseFlow_local_data';
+const appState = {
+    user: { uid: 'manager-123', role: 'Manager', managerId: 'manager-123' },
+    expenses: [],
+};
+
+const loadStateFromLocalStorage = () => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) appState.expenses = JSON.parse(stored).expenses || [];
+};
+const saveStateToLocalStorage = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ expenses: appState.expenses }));
+};
+
+
+const showToast = (msg, type='info') => {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    const color = type==='success' ? 'bg-green-500' : type==='error' ? 'bg-red-500' : 'bg-gray-700';
+    toast.className = `${color} text-white p-4 rounded-lg shadow-2xl mb-3`;
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(() => { toast.remove(); }, 3000);
+};
+
+const Icon = (name, className='w-5 h-5') => {
+    const icons = {
+        check: '✔', x: '✖'
+    };
+    return `<span class="${className}">${icons[name]||'?'}</span>`;
+};
+
+
+const ExpenseStatusBadge = (status) => {
+    const styles = {
+        Pending: 'bg-yellow-100 text-yellow-800',
+        Approved: 'bg-green-100 text-green-800',
+        Rejected: 'bg-red-100 text-red-800'
+    };
+    return `<span class="px-3 py-1 text-xs font-semibold rounded-full ${styles[status]||'bg-gray-100'}">${status}</span>`;
+};
+
+const renderHeader = () => `
+<header class="w-full max-w-6xl mx-auto bg-white p-4 md:p-6 rounded-xl container-shadow mb-8">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-black text-indigo-700">ExpenseFlow - Manager Dashboard</h1>
+        <span class="px-2 py-1 bg-indigo-500 text-white rounded">${appState.user.role}</span>
+    </div>
+</header>`;
+
+const renderManagerDashboard = () => {
+    const expenses = appState.expenses.filter(exp => exp.status === 'Pending');
+    if (!expenses.length) return `<div class="bg-white p-8 rounded-xl container-shadow max-w-4xl text-center">
+        <h2 class="text-2xl font-bold text-gray-700">No Pending Expenses 🎉</h2>
+        <p class="text-gray-500 mt-2">All expenses are approved or rejected.</p>
+    </div>`;
+
+    return `
+<div class="bg-white p-6 md:p-8 rounded-xl container-shadow w-full max-w-4xl">
+<h2 class="text-3xl font-bold text-gray-900 mb-6">Pending Approvals (${expenses.length})</h2>
+<div class="space-y-4">
+${expenses.map(exp => `
+<div class="p-4 border border-gray-200 rounded-lg shadow-sm flex flex-col">
+    <div class="flex justify-between items-center mb-2">
+        <span class="font-bold text-indigo-600">${exp.original_currency} ${exp.amount.toFixed(2)}</span>
+        ${ExpenseStatusBadge(exp.status)}
+    </div>
+    <p class="text-gray-700 mb-1">${exp.description}</p>
+    <p class="text-xs text-gray-500">Submitted by: ${exp.submitter_name} on ${new Date(exp.submitted_at).toLocaleDateString()}</p>
+    <div class="flex space-x-2 pt-2 mt-2 border-t">
+        <button data-id="${exp.id}" data-action="approve" class="flex-1 py-2 bg-green-600 text-white rounded hover:bg-green-700">${Icon('check')} Approve</button>
+        <button data-id="${exp.id}" data-action="reject" class="flex-1 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200">${Icon('x')} Reject</button>
+    </div>
+</div>`).join('')}
+</div>
+</div>`;
+};
+
+const renderApp = () => {
+    const app = document.getElementById('app');
+    app.innerHTML = renderHeader() + renderManagerDashboard();
+
+
+    document.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.onclick = () => {
+            const expId = btn.dataset.id;
+            const action = btn.dataset.action;
+            const index = appState.expenses.findIndex(e => e.id===expId);
+            if (index === -1) return showToast("Expense not found.", "error");
+            appState.expenses[index].status = action==='approve' ? 'Approved' : 'Rejected';
+            saveStateToLocalStorage();
+            showToast(`Expense ${expId} ${action}d.`, 'success');
+            renderApp();
+        };
+    });
+};
+
+if (!localStorage.getItem(STORAGE_KEY)) {
+    appState.expenses = [
+        {id:'exp1', submitter_name:'Alice', amount:120.50, original_currency:'USD', description:'Team lunch', submitted_at:new Date().toISOString(), status:'Pending'},
+        {id:'exp2', submitter_name:'Bob', amount:340.00, original_currency:'EUR', description:'Client meeting taxi', submitted_at:new Date().toISOString(), status:'Pending'}
+    ];
+    saveStateToLocalStorage();
+} else {
+    loadStateFromLocalStorage();
+}
+
+window.onload = renderApp;
+</script>
+</body>
+</html>
